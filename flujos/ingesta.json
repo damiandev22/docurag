@@ -1,0 +1,314 @@
+{
+  "name": "DocuRAG - Ingesta",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ingesta",
+        "authentication": "headerAuth",
+        "options": {
+          "allowedOrigins": "http://localhost:8080"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -240,
+        16
+      ],
+      "id": "979e6290-a4c2-44b8-84fa-4433113b4802",
+      "name": "Webhook",
+      "webhookId": "b1596dfe-a80b-4956-8910-8fd270c5f220",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Dt76HTzjiQhpCEAD",
+          "name": "DocuRAG API key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "docurag",
+          "mode": "list",
+          "cachedResultName": "docurag"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1.3,
+      "position": [
+        560,
+        32
+      ],
+      "id": "8fc6c2da-2322-4300-b60b-c03c11942030",
+      "name": "Qdrant Vector Store",
+      "credentials": {
+        "qdrantApi": {
+          "id": "PBlZUMGItMgBQH3y",
+          "name": "Qdrant local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.texto }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "documento",
+                "value": "={{ $json.documento }}"
+              },
+              {
+                "name": "pagina",
+                "value": "={{ $json.pagina }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        192
+      ],
+      "id": "24a9f5da-f3b8-4a14-bf7b-369febc9ad95",
+      "name": "Default Data Loader"
+    },
+    {
+      "parameters": {
+        "chunkSize": 3000,
+        "chunkOverlap": 400,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        672,
+        336
+      ],
+      "id": "a74c0f11-b4d4-42a5-b0a5-b49e99c0a3a8",
+      "name": "Recursive Character Text Splitter"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {
+          "joinPages": false
+        }
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -32,
+        16
+      ],
+      "id": "f44ad038-c831-434e-972c-4c308e9a6979",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "jsCode": "const paginas = $input.first().json.text;\nconst archivo = $('Webhook').first().binary.data.fileName;\nconst titulo = $('Webhook').first().json.body?.titulo;\nconst doc = (titulo && titulo.trim()) || archivo.replace(/\\.pdf$/i, '');\n\nreturn paginas\n  .map((t, i) => ({ json: { pagina: i + 1, texto: t, documento: doc } }))\n  .filter(p => p.json.texto && p.json.texto.trim().length > 250);"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        144,
+        16
+      ],
+      "id": "9c803cae-1fe3-407b-8a8e-e299f92ea634",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "batchSize": 15,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        336,
+        16
+      ],
+      "id": "206abade-2415-453e-89ba-413864aec371",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "model": "nomic-embed-text:latest"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "typeVersion": 1,
+      "position": [
+        384,
+        208
+      ],
+      "id": "8cab49b9-a44b-43a4-8343-bbda5da8fab6",
+      "name": "Embeddings Ollama",
+      "credentials": {
+        "ollamaApi": {
+          "id": "rSP6g5OZSBu2olqy",
+          "name": "Ollama local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-embedding-001"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        560,
+        208
+      ],
+      "id": "d93fdd73-5924-4201-82cf-250dafbcc91a",
+      "name": "Embeddings Google Gemini",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "bxxLTyH93cgTeFIO",
+          "name": "Google Gemini(PaLM) Api"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 65
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1088,
+        288
+      ],
+      "id": "8abfa63f-4a44-49a7-b4ee-1e55cb118aa4",
+      "name": "Wait",
+      "webhookId": "48a3aeec-d8ab-4fae-90b1-551fc8fa7676"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Qdrant Vector Store",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Character Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant Vector Store": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Qdrant Vector Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Ollama": {
+      "ai_embedding": [
+        []
+      ]
+    },
+    "Embeddings Google Gemini": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Qdrant Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f5735000-8f3e-4872-964a-6ad214e530e8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3e1dab3b95f46bf310406e15a8da3fbd78b71095716477e1eb768ffecedcb2f2"
+  },
+  "id": "rl8T8TRazgR9rB3T",
+  "tags": []
+}

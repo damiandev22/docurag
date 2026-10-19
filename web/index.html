@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DocuRAG</title>
+<style>
+  :root {
+    --paper: #F6F7F9;
+    --surface: #FFFFFF;
+    --ink: #1C2430;
+    --muted: #5B6676;
+    --rule: #D9DEE5;
+    --accent: #2747A6;
+    --accent-ink: #FFFFFF;
+    --mark: #FFE36E;
+    --mark-ink: #1C2430;
+    --danger: #A62727;
+    --serif: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --sans: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #12161C;
+      --surface: #1A2028;
+      --ink: #E7EBF0;
+      --muted: #98A3B3;
+      --rule: #2A313B;
+      --accent: #8EA6FF;
+      --accent-ink: #12161C;
+      --mark: #E6C84A;
+      --mark-ink: #12161C;
+      --danger: #FF8A8A;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 15px/1.5 var(--sans);
+  }
+  header {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 28px 24px 8px;
+  }
+  header h1 {
+    margin: 0;
+    font: 600 28px/1.1 var(--serif);
+    letter-spacing: -0.01em;
+  }
+  header p { margin: 6px 0 0; color: var(--muted); }
+
+  .layout {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 16px 24px 32px;
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    gap: 28px;
+    align-items: start;
+  }
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  aside section + section { margin-top: 28px; }
+  aside h2 {
+    margin: 0 0 10px;
+    font: 600 16px/1.3 var(--serif);
+  }
+  .field { display: block; margin-bottom: 10px; }
+  .field span { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  input[type="text"], input[type="file"], textarea {
+    width: 100%;
+    font: inherit;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  input[type="file"] { padding: 6px; }
+  button {
+    font: inherit;
+    cursor: pointer;
+  }
+  .primary {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border: 0;
+    border-radius: 6px;
+    padding: 9px 16px;
+    font-weight: 600;
+  }
+  .primary:disabled { opacity: 0.5; cursor: progress; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .status { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+  .status.error { color: var(--danger); }
+
+  .examples { list-style: none; margin: 0; padding: 0; }
+  .examples li + li { margin-top: 6px; }
+  .examples button {
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 14px;
+  }
+  .examples button:hover { border-color: var(--accent); }
+
+  main {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    min-height: 70vh;
+  }
+  #thread {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+  }
+  .empty { color: var(--muted); max-width: 60ch; }
+  .empty strong { color: var(--ink); font-family: var(--serif); font-size: 18px; display: block; margin-bottom: 6px; }
+
+  .q {
+    margin: 24px 0 10px;
+    font: 600 17px/1.35 var(--serif);
+  }
+  .q:first-child { margin-top: 0; }
+  .a {
+    font: 16px/1.65 var(--serif);
+    max-width: 72ch;
+  }
+  .a p { margin: 0 0 10px; }
+  .a ul, .a ol { margin: 0 0 10px; padding-left: 22px; }
+  .a li { margin-bottom: 4px; }
+  .cite {
+    display: inline-block;
+    min-width: 1.5em;
+    margin: 0 1px;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 3px;
+    background: var(--mark);
+    color: var(--mark-ink);
+    font: 600 12px/1.6 var(--sans);
+    vertical-align: 2px;
+  }
+  .meta { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+  .meta em { font-style: italic; }
+
+  .sources { list-style: none; margin: 12px 0 0; padding: 12px 0 0; border-top: 1px solid var(--rule); max-width: 72ch; }
+  .src {
+    display: grid;
+    grid-template-columns: auto 1fr auto 70px;
+    gap: 10px;
+    align-items: center;
+    padding: 5px 6px;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  .src-n { font-weight: 600; font-size: 12px; background: var(--mark); color: var(--mark-ink); border-radius: 3px; padding: 0 5px; }
+  .src-page { color: var(--muted); white-space: nowrap; }
+  .bar { height: 4px; background: var(--rule); border-radius: 2px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); }
+  .src.flash { background: color-mix(in srgb, var(--mark) 35%, transparent); }
+
+  .loading { color: var(--muted); font-style: italic; }
+  .loading::after { content: "…"; animation: blink 1.2s steps(4) infinite; }
+  @keyframes blink { 50% { opacity: 0.2; } }
+  @media (prefers-reduced-motion: reduce) {
+    .loading::after { animation: none; }
+  }
+  .err { color: var(--danger); }
+
+  form.ask {
+    display: flex;
+    gap: 10px;
+    padding: 14px;
+    border-top: 1px solid var(--rule);
+  }
+  form.ask textarea { resize: none; height: 44px; }
+
+  footer { max-width: 1180px; margin: 0 auto; padding: 0 24px 24px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>DocuRAG</h1>
+  <p>Pregunta a tus documentos. Cada respuesta indica de qué documento y página sale.</p>
+</header>
+
+<div class="layout">
+  <aside>
+    <section>
+      <h2>Añadir documento</h2>
+      <form id="upload">
+        <label class="field">
+          <span>PDF con texto seleccionable</span>
+          <input type="file" id="file" accept="application/pdf" required>
+        </label>
+        <label class="field">
+          <span>Título que aparecerá en las citas</span>
+          <input type="text" id="title" placeholder="Ej.: Microsoft, Responsible AI Standard">
+        </label>
+        <button class="primary" id="uploadBtn" type="submit">Indexar documento</button>
+        <p class="status" id="uploadStatus" role="status"></p>
+      </form>
+    </section>
+
+    <section>
+      <h2>Preguntas de ejemplo</h2>
+      <ul class="examples" id="examples"></ul>
+    </section>
+  </aside>
+
+  <main>
+    <div id="thread" aria-live="polite">
+      <div class="empty" id="empty">
+        <strong>Haz una pregunta sobre los documentos indexados</strong>
+        Puedes preguntar en español aunque los documentos estén en inglés. Si la respuesta no está en los documentos, el sistema lo dice en lugar de inventarla.
+      </div>
+    </div>
+    <form class="ask" id="ask">
+      <label for="question" class="visually-hidden" style="position:absolute;left:-9999px">Pregunta</label>
+      <textarea id="question" placeholder="Escribe tu pregunta y pulsa Enter" required></textarea>
+      <button class="primary" id="askBtn" type="submit">Preguntar</button>
+    </form>
+  </main>
+</div>
+
+<footer>Funciona en local con n8n, Qdrant y Gemini.</footer>
+
+<script>
+  // Configuración
+  const API = 'http://localhost:5678/webhook';
+  const API_KEY = ''; // Rellenar si se activa Header Auth (X-API-Key) en los webhooks de n8n
+
+  const EXAMPLES = [
+    '¿Qué prácticas de IA prohíbe la ley europea?',
+    'Compara lo que dicen Google y el Parlamento Europeo sobre transparencia',
+    '¿Cómo se clasifican los sistemas de alto riesgo?',
+    '¿Qué fases tiene el enfoque de ciclo de vida de Google?'
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const authHeaders = () => (API_KEY ? { 'X-API-Key': API_KEY } : {});
+  let msgCount = 0;
+
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // Markdown mínimo: párrafos, negrita, cursiva, listas anidadas y citas [n]
+  function inline(s, id) {
+    return s
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/\[(\d+)\]/g, `<button type="button" class="cite" data-msg="${id}" data-n="$1" aria-label="Ver fuente $1">$1</button>`);
+  }
+
+  function md(text, id) {
+    const lines = esc(text).split('\n');
+    let out = '';
+    let inP = false;
+    const stack = [];
+
+    const closeP = () => { if (inP) { out += '</p>'; inP = false; } };
+    const closeTo = (level) => {
+      while (stack.length && stack[stack.length - 1].level > level) {
+        out += '</li></' + stack.pop().type + '>';
+      }
+    };
+
+    for (const line of lines) {
+      const m = line.match(/^(\s*)([-*]|\d+\.)\s+(.*)$/);
+      if (m) {
+        closeP();
+        const level = Math.floor(m[1].length / 2);
+        const type = /\d/.test(m[2]) ? 'ol' : 'ul';
+        closeTo(level);
+        const top = stack[stack.length - 1];
+        if (top && top.level === level) {
+          if (top.type !== type) {
+            out += '</li></' + stack.pop().type + '><' + type + '>';
+            stack.push({ type, level });
+          } else {
+            out += '</li>';
+          }
+        } else {
+          out += '<' + type + '>';
+          stack.push({ type, level });
+        }
+        out += '<li>' + inline(m[3], id);
+      } else if (line.trim() === '') {
+        closeTo(-1);
+        closeP();
+      } else {
+        closeTo(-1);
+        if (inP) { out += '<br>' + inline(line, id); }
+        else { out += '<p>' + inline(line, id); inP = true; }
+      }
+    }
+    closeTo(-1);
+    closeP();
+    return out;
+  }
+
+  function renderSources(fuentes, id) {
+    if (!fuentes || !fuentes.length) return '';
+    const items = fuentes.map((f) => {
+      const pct = Math.max(0, Math.min(100, Math.round((f.score || 0) * 100)));
+      return `<li class="src" id="src-${id}-${f.n}">
+        <span class="src-n">${esc(f.n)}</span>
+        <span>${esc(f.documento)}</span>
+        <span class="src-page">pág. ${esc(f.pagina)}</span>
+        <span class="bar" title="Relevancia ${pct}%"><i style="width:${pct}%"></i></span>
+      </li>`;
+    }).join('');
+    return `<ul class="sources" aria-label="Fuentes">${items}</ul>`;
+  }
+
+  async function ask(question) {
+    const q = question.trim();
+    if (!q) return;
+    const id = ++msgCount;
+    const empty = $('empty');
+    if (empty) empty.remove();
+
+    const block = document.createElement('div');
+    block.innerHTML = `<p class="q">${esc(q)}</p><div class="a"><p class="loading">Buscando en los documentos</p></div>`;
+    $('thread').appendChild(block);
+    block.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const answer = block.querySelector('.a');
+
+    $('askBtn').disabled = true;
+    const t0 = performance.now();
+    try {
+      const res = await fetch(`${API}/consulta`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ pregunta: q })
+      });
+      if (!res.ok) throw new Error(`El servidor respondió con el código ${res.status}. Comprueba que el flujo de consulta está activo en n8n.`);
+      const data = await res.json();
+      const secs = ((performance.now() - t0) / 1000).toFixed(1).replace('.', ',');
+      answer.innerHTML = md(data.respuesta || '', id)
+        + renderSources(data.fuentes, id)
+        + `<p class="meta">Respondido en ${secs} s.${data.busqueda ? ` Búsqueda usada: <em>${esc(data.busqueda)}</em>` : ''}</p>`;
+    } catch (e) {
+      const msg = e instanceof TypeError
+        ? 'No hay conexión con n8n en localhost:5678. Comprueba que el contenedor está en marcha y que el webhook permite este origen (CORS).'
+        : e.message;
+      answer.innerHTML = `<p class="err">${esc(msg)}</p>`;
+    } finally {
+      $('askBtn').disabled = false;
+    }
+  }
+
+  // Al pulsar una cita, resalta su fuente
+  $('thread').addEventListener('click', (e) => {
+    const btn = e.target.closest('.cite');
+    if (!btn) return;
+    const src = $(`src-${btn.dataset.msg}-${btn.dataset.n}`);
+    if (!src) return;
+    src.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    src.classList.add('flash');
+    setTimeout(() => src.classList.remove('flash'), 1600);
+  });
+
+  $('ask').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const q = $('question').value;
+    $('question').value = '';
+    ask(q);
+  });
+  $('question').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      $('ask').requestSubmit();
+    }
+  });
+
+  for (const text of EXAMPLES) {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = text;
+    b.addEventListener('click', () => ask(text));
+    li.appendChild(b);
+    $('examples').appendChild(li);
+  }
+
+  $('upload').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const file = $('file').files[0];
+    const status = $('uploadStatus');
+    if (!file) return;
+    const title = $('title').value.trim() || file.name.replace(/\.pdf$/i, '');
+    const fd = new FormData();
+    fd.append('data', file);
+    fd.append('titulo', title);
+
+    $('uploadBtn').disabled = true;
+    status.className = 'status';
+    status.textContent = 'Enviando el documento…';
+    try {
+      const res = await fetch(`${API}/ingesta`, { method: 'POST', headers: authHeaders(), body: fd });
+      if (!res.ok) throw new Error(`El servidor respondió con el código ${res.status}. Comprueba que el flujo de ingesta está activo en n8n.`);
+      status.textContent = `«${title}» se está indexando. Tarda en torno a un minuto por cada 15 páginas; después ya puedes preguntar sobre él.`;
+      $('upload').reset();
+    } catch (err) {
+      status.className = 'status error';
+      status.textContent = err instanceof TypeError
+        ? 'No hay conexión con n8n en localhost:5678. Comprueba que el contenedor está en marcha y que el webhook permite este origen (CORS).'
+        : err.message;
+    } finally {
+      $('uploadBtn').disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

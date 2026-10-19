@@ -1,0 +1,331 @@
+{
+  "name": "DocuRAG - Consulta",
+  "nodes": [
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.5-flash-lite",
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        704,
+        224
+      ],
+      "id": "7faa634d-0773-480f-b3e0-01d67229ba4b",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "bxxLTyH93cgTeFIO",
+          "name": "Google Gemini(PaLM) Api"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "89c6360f-9260-457c-8781-a19f12177839",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const groups = $input.first().json.result.groups;\nconst hits = groups.flatMap(g => g.hits).sort((a, b) => b.score - a.score);\n\nconst contexto = hits.map((h, i) =>\n  `[Fuente ${i + 1}] ${h.payload.metadata.documento}, página ${h.payload.metadata.pagina}\\n${h.payload.content}`\n).join('\\n\\n---\\n\\n');\n\nconst fuentes = hits.map((h, i) => ({\n  n: i + 1,\n  documento: h.payload.metadata.documento,\n  pagina: h.payload.metadata.pagina,\n  score: Math.round(h.score * 100) / 100\n}));\n\nreturn [{ json: { pregunta: $('Webhook - Pregunta').first().json.body.pregunta, contexto, fuentes } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        0
+      ],
+      "id": "de0ecb7d-2e83-4ba5-9365-903d64d3bed1",
+      "name": "Contexto"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $input.first().json.text;\nlet r = original.replace(/\\[Fuente\\s*(\\d+)\\]/gi, '[$1]');\n\nconst todas = $('Contexto').first().json.fuentes;\nconst porN = new Map(todas.map(f => [f.n, f]));\nconst numPorClave = new Map();\nconst fuentes = [];\n\nr = r.replace(/\\[(\\d+)\\]/g, (_, n) => {\n  const f = porN.get(Number(n));\n  if (!f) return '';\n  const clave = f.documento + '|' + f.pagina;\n  if (!numPorClave.has(clave)) {\n    numPorClave.set(clave, numPorClave.size + 1);\n    fuentes.push({ n: numPorClave.get(clave), documento: f.documento, pagina: f.pagina, score: f.score });\n  }\n  return `[${numPorClave.get(clave)}]`;\n});\n\nr = r.replace(/(\\[\\d+\\])(\\1)+/g, '$1');\n\nreturn [{\n  json: {\n    respuesta: r,\n    busqueda: $('Reescribir búsqueda').first().json.text,\n    fuentes\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "9046ea43-3b84-4482-a8b0-f3a44c00aa59",
+      "name": "Salida"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Convierte esta pregunta en una consulta de búsqueda para encontrar fragmentos relevantes en documentos en inglés y en español.\n\nReglas:\n- Escribe la consulta en inglés y después en español, separadas por \" | \".\n- Usa solo los conceptos que aparecen en la pregunta, entre 5 y 12 palabras por idioma. No añadas temas, normas ni conceptos que la pregunta no mencione.\n- Si la pregunta contiene siglas, desarróllalas: RGPD o GDPR = General Data Protection Regulation, protección de datos personales; IA = AI, inteligencia artificial.\n- No incluyas nombres de empresas o instituciones (como Google, Microsoft o Parlamento Europeo).\n- No incluyas verbos como \"compara\" o \"qué dice\".\n- Devuelve solo la consulta, sin comillas ni explicaciones.\n\nPregunta: {{ $json.body.pregunta }}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        -144,
+        0
+      ],
+      "id": "f34c21c8-414b-4a6f-99a8-021aa0907c86",
+      "name": "Reescribir búsqueda"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.5-flash-lite",
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -112,
+        176
+      ],
+      "id": "9381a88a-3e03-4a88-8622-4633ad25cf8d",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "bxxLTyH93cgTeFIO",
+          "name": "Google Gemini(PaLM) Api"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Eres un asistente que responde preguntas sobre documentos.\n\nReglas:\n- Responde SIEMPRE en español, aunque las fuentes estén en inglés.\n- Usa SOLO la información de las fuentes. No añadas conocimiento propio.\n- Si las fuentes cubren solo una parte de la pregunta, responde esa parte e indica claramente qué parte no aparece en los documentos.\n- Responde exactamente \"No encuentro esa información en los documentos indexados.\" solo si NINGUNA fuente es relevante para la pregunta.\n- Cita cada afirmación con el número de la fuente entre corchetes, por ejemplo [1] o [2][3]. Usa el número que aparece en \"[Fuente N]\". No escribas el nombre del documento en el texto.\n- Ignora las fuentes que no tengan relación con la pregunta.\n- Si las fuentes de distintos documentos difieren, indícalo.\n- Si las fuentes distinguen entre la propuesta inicial y el texto final aprobado, prioriza el texto final e indica la diferencia.\n- Si una norma o prohibición tiene excepciones en las fuentes, menciónalas.\n- Máximo 250 palabras, salvo que la pregunta pida más detalle.\n\nFUENTES:\n{{ $json.contexto }}\n\nPREGUNTA:\n{{ $json.pregunta }}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        768,
+        0
+      ],
+      "id": "7bba14ff-c5c3-4cf6-98f4-4dc4abc2f957",
+      "name": "Basic LLM Chain - Respuesta IA"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "consulta",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "http://localhost:8080"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -384,
+        -16
+      ],
+      "id": "d853ee6c-600f-4493-93c5-d84446c72e91",
+      "name": "Webhook - Pregunta",
+      "webhookId": "cf5212af-3442-4de7-9b18-3b12d882491c",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Dt76HTzjiQhpCEAD",
+          "name": "DocuRAG API key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        864,
+        224
+      ],
+      "id": "98ae163d-1959-4e5c-bea6-ba44f5254b9c",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "j6rPc9thlW7RBniW",
+          "name": "OpenAi API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ content: { parts: [{ text: $json.text }] } }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        208,
+        -128
+      ],
+      "id": "d46b9497-45be-4cbd-8bf7-9ce165a46f74",
+      "name": "HTTP Request - Vector de la consulta",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "hvLW7fLAEwyNXujX",
+          "name": "Header Auth - Gemini API key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://qdrant:6333/collections/docurag/points/query/groups",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $json.embedding.values, group_by: 'metadata.documento', limit: 5, group_size: 3, with_payload: true }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        416,
+        -128
+      ],
+      "id": "1e6b4234-9a6d-4bba-b5fe-ddd103edf75c",
+      "name": "HTTP Request - Buscar por documento"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain - Respuesta IA",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contexto": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain - Respuesta IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salida": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Reescribir búsqueda",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reescribir búsqueda": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Vector de la consulta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain - Respuesta IA": {
+      "main": [
+        [
+          {
+            "node": "Salida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Pregunta": {
+      "main": [
+        [
+          {
+            "node": "Reescribir búsqueda",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        []
+      ]
+    },
+    "HTTP Request - Vector de la consulta": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Buscar por documento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Buscar por documento": {
+      "main": [
+        [
+          {
+            "node": "Contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f4e94b62-0c40-44ac-8b34-12c79559f2cc",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3e1dab3b95f46bf310406e15a8da3fbd78b71095716477e1eb768ffecedcb2f2"
+  },
+  "id": "1pf1DHTRl2OC0jpt",
+  "tags": []
+}
