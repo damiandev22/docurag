@@ -7,6 +7,23 @@ Las preguntas pueden hacerse en español aunque los documentos estén en inglés
 ![Arquitectura](docs/arquitectura.png)
 
 ## Qué hace
+## Capturas
+
+Comparación entre documentos: las citas en amarillo enlazan con la fuente (documento y página).
+
+![Respuesta comparando Google y el Parlamento Europeo](docs/web-comparacion.png)
+
+Si la respuesta no está en los documentos, lo dice en lugar de inventarla.
+
+![Respuesta cuando la información no está en los documentos](docs/web-sin-respuesta.png)
+
+Flujo de consulta en n8n: reescritura, vector, búsqueda agrupada, contexto, respuesta y citas.
+
+![Flujo de consulta en n8n](docs/n8n-consulta.png)
+
+Flujo de ingesta en n8n: PDF página a página, lotes de 15 y espera para respetar la cuota.
+
+![Flujo de ingesta en n8n](docs/n8n-ingesta.png)
 
 - **Ingesta:** sube un PDF con su título. Se extrae el texto página a página, se descartan las páginas sin contenido (portadas, separadores), se divide en fragmentos y se guarda en Qdrant con el documento y la página como metadata.
 - **Consulta:** la pregunta se reescribe en inglés y español con los conceptos clave, se busca agrupando por documento y Gemini responde solo con los fragmentos encontrados, citando cada afirmación.
